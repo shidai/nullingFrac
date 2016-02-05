@@ -20,9 +20,15 @@
 
 int read_prof (subintegration *sub, pheader *header)
 {  
+	int i, j, k;
 	fitsfile *fptr;       // pointer to the FITS file, defined in fitsio.h 
 	int status;
 	int colnum;
+	double *data, *dat_offs, *dat_scl;
+
+	data = (double *)malloc(sizeof(double)*header->nbin*header->nchan*header->npol);
+	dat_offs = (double *)malloc(sizeof(double)*header->nchan*header->npol);
+	dat_scl = (double *)malloc(sizeof(double)*header->nchan*header->npol);
 
 	status = 0;
 
@@ -54,13 +60,65 @@ int read_prof (subintegration *sub, pheader *header)
 	null = 0;
 	anynull = 0;
 
-	fits_read_col(fptr, TDOUBLE, colnum, frow, felem, nelem, &null, sub->p_multi, &anynull, &status);           // read the column
+	//fits_read_col(fptr, TDOUBLE, colnum, frow, felem, nelem, &null, sub->p_multi, &anynull, &status);           // read the column
+	fits_read_col(fptr, TDOUBLE, colnum, frow, felem, nelem, &null, data, &anynull, &status);           // read the column
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////
+	// read DAT_SCL
+ 
+	if ( fits_get_colnum(fptr, CASEINSEN, "DAT_SCL", &colnum, &status) )           // get the colnum number
+	{
+		printf( "error while getting the colnum number\n" );
+	}
+
+	frow = sub->indexSub;
+  felem = 1;
+  nelem = header->nchan*header->npol;
+  null = 0;
+  anynull = 0;
+
+	fits_read_col(fptr, TDOUBLE, colnum, frow, felem, nelem, &null, dat_scl, &anynull, &status);           // read the column
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////
+	// read DAT_OFFS
+ 
+	if ( fits_get_colnum(fptr, CASEINSEN, "DAT_OFFS", &colnum, &status) )           // get the colnum number
+	{
+		printf( "error while getting the colnum number\n" );
+	}
+
+	frow = sub->indexSub;
+  felem = 1;
+  nelem = header->nchan*header->npol;
+  null = 0;
+  anynull = 0;
+
+	fits_read_col(fptr, TDOUBLE, colnum, frow, felem, nelem, &null, dat_offs, &anynull, &status);           // read the column
 
 	// close psrfits file
 	if ( fits_close_file(fptr, &status) )
 	{
 		printf( " error while closing the file " );
 	}
+
+	//for (i = 0; i < header->nbin*header->nchan*header->npol; i++)
+	//{
+	//	printf ("%lf\n", sub->p_multi[i]);
+	//}
+	for (i = 0; i < header->npol; i++)
+	{
+		for (j = 0; j < header->nchan; j++)
+		{
+			for (k = 0; k < header->nbin; k++)
+			{
+				sub->p_multi[i*header->nchan*header->nbin + j*header->nbin + k] = data[i*header->nchan*header->nbin + j*header->nbin + k]*dat_scl[i*header->nchan + j] + dat_offs[i*header->nchan + j];
+			}
+		}
+	}
+
+	free (data);
+	free (dat_scl);
+	free (dat_offs);
 
 	return 0;
 }
@@ -180,12 +238,12 @@ int cal_pulseEnergy (double *in, double frac_on, int n, double out[2])
 {
 	// define the on_pulse range, frac_on is the fraction of the phase
 	// define the off_pulse range, frac_off is the fraction of the phase
-	double on[n];
-	double off[n];
 	int num_on = (int)(n*frac_on);
-	int num_off = (int)(n*frac_on);
+	int num_off = (int)(n*(1.0-frac_on));
 	double on_0[num_on];
 	double off_0[num_off];
+	double on[num_on];
+	double off[num_on];
 
 	int index_on;
 	int index_off;
@@ -196,10 +254,10 @@ int cal_pulseEnergy (double *in, double frac_on, int n, double out[2])
 	double off_energy = 0.0;
 
 	index_on = def_on_pulse (n, in, frac_on);
-	index_off = def_off_pulse (n, in, frac_on);
+	index_off = def_off_pulse (n, in, 1.0-frac_on);
 
 	get_region (n, index_on, in, on_0, frac_on);
-	get_region (n, index_off, in, off_0, frac_on);
+	get_region (n, index_off, in, off_0, 1.0-frac_on);
 
 	// remove baseline
 	for (i = 0; i < num_off; i++)
@@ -213,6 +271,7 @@ int cal_pulseEnergy (double *in, double frac_on, int n, double out[2])
 		on[i] = (on_0[i]-baseline);
 		off[i] = (off_0[i]-baseline);
 		//s_norm[i] = (s[i]-baseline)/(s_peak-baseline);
+		//printf ("%lf\n", on[i]);
 	}
 
 	// calculate on pulse and off pulse energy
@@ -220,10 +279,12 @@ int cal_pulseEnergy (double *in, double frac_on, int n, double out[2])
 	{
 		on_energy += on[i];
 		off_energy += off[i];
+		//printf ("%d %lf\n", i, off_energy);
 	}
 
 	out[0] = on_energy;
 	out[1] = off_energy;
+	//printf ("%lf %lf\n", on_energy, off_energy);
 	
 	return 0;
 }
@@ -276,7 +337,8 @@ int histogram (double *data, int n, float *x, float *val, float low, float up, i
 				count += 1;
 			}
 		}
-		val [i] = count;
+		val[i] = count;
+		//printf ("%f\n", val[i]);
 	}
 
 	free(temp);
@@ -288,6 +350,7 @@ int makePlot (char *fname, char *dname, int number)
 	FILE *fpt;
 	double *on_energy;
 	double *off_energy;
+	double ave_on, ave_off;
 	double on, off;
 	int i, j;
 
@@ -311,18 +374,34 @@ int makePlot (char *fname, char *dname, int number)
 	if (fclose (fpt) != 0)
 		fprintf (stderr, "Error closing\n");
 
+	ave_on = 0.0;
+	ave_off = 0.0;
+
+	for (i = 0; i < number; i++)
+	{
+		ave_on += on_energy[i];
+		ave_off += off_energy[i];
+	}
+	ave_on = ave_on/number;
+	ave_off = ave_off/number;
+
+	for (i = 0; i < number; i++)
+	{
+		on_energy[i] = on_energy[i]/ave_on;
+		off_energy[i] = off_energy[i]/ave_on;
+	}
 	/////////////////////////////////////////////////
 
 	float *xHis_on; // x axis of the histogram
 	float *val_on;  // data value of the histogram
 	float *xHis_off; // x axis of the histogram
 	float *val_off;  // data value of the histogram
-	int step = 500; // steps in the histogram
+	int step = 100; // steps in the histogram
 
 	//char caption[1024];
 	//char text[1024];
 
-	float max;
+	float max, max1, max2;
 
 	// make histogram
 	xHis_on = (float*)malloc(sizeof(float)*step);
@@ -330,23 +409,25 @@ int makePlot (char *fname, char *dname, int number)
 	xHis_off = (float*)malloc(sizeof(float)*step);
 	val_off = (float*)malloc(sizeof(float)*step);
 
-	histogram (on_energy, number, xHis_on, val_on, -5.0, 5.0, step);
-	histogram (off_energy, number, xHis_off, val_off, -5.0, 5.0, step);
+	histogram (on_energy, number, xHis_on, val_on, -1.0, 4.0, step);
+	histogram (off_energy, number, xHis_off, val_off, -1.0, 4.0, step);
 
 	// plot 
 	//cpgbeg(0,"/xs",1,1);
 	cpgbeg(0,dname,1,1);
 
-      	cpgsch(2); // set character height
-      	cpgscf(2); // set character font
+	cpgsch(1); // set character height
+	cpgscf(1); // set character font
 
 	// find the max
-	max = find_max_value(step,val_on);
-      	//cpgenv(-5,5,0,4500,0,1); // set window and viewport and draw labeled frame
-      	cpgenv(-5,5,0,max+0.1*max,0,1); // set window and viewport and draw labeled frame
+	max1 = find_max_value(step,val_off);
+	max2 = find_max_value(step,val_on);
+	max = (max1 >= max2 ? max1 : max2);
+	//cpgenv(-5,5,0,4500,0,1); // set window and viewport and draw labeled frame
+	cpgenv(-1,4,0,max+0.1*max,0,1); // set window and viewport and draw labeled frame
 
 	//sprintf(caption, "%s", "Flux density histogram");
-      	cpglab("Flux (mJy)","Number","");
+	cpglab("Flux (mJy)","Number","");
 	cpgbin(step,xHis_on,val_on,0);
 	cpgsci(2);
 	cpgbin(step,xHis_off,val_off,0);
@@ -393,34 +474,3 @@ float find_max_value (int n, float *s)
 
 	return c;
 }
-
-float find_min_value (int n, float *s)
-{
-	int i;
-	float *temp;
-
-	temp = (float *)malloc(sizeof(float)*n);
-
-	for (i = 0; i < n; i++)
-	{
-		temp[i] = s[i];
-	}
-
-	float a, b, c;
-	for (i = 0; i < n-1; i++)
-	{
-		a = temp[i];
-		b = temp[i+1];
-															
-		c = (a <= b ? a : b);
-		
-		temp[i+1] = c;
-	
-	}
-	
-	c = temp[n-1];
-	free(temp);
-
-	return c;
-}
-

@@ -21,6 +21,8 @@ typedef struct subintegration{
 	int indexSub;        // subintegration index
 	int indexChn;        // channel index
 	double *p_multi;
+	double *dat_scl;
+	double *dat_offs;
 } subintegration;
 
 int read_prof (subintegration *sub, pheader *header);

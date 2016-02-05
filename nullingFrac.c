@@ -45,7 +45,7 @@ int main (int argc, char *argv[])
 		else if (strcmp(argv[i],"-frac")==0)
 		{
 			on_frac = atof(argv[++i]);
-			printf ("On pulse fraction is %.1f: ", on_frac);
+			printf ("On pulse fraction is %.1f: \n", on_frac);
 		}
 	}
 
@@ -108,8 +108,8 @@ int main (int argc, char *argv[])
 				sub->indexChn = i;
 				for (j = 0; j < nphase; j++)
 				{
-					//printf ("%lf %lf\n", p_multi[j], s[j]);
 					p_temp[j] = sub->p_multi[i*nphase + j];
+					//printf ("%lf\n", p_temp[j]);
 				}
 				cal_pulseEnergy (p_temp, on_frac, nphase, energy);
 				fprintf (fpt, "%lf %lf\n", energy[0], energy[1]);
