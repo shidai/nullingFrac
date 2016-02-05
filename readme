@@ -1,0 +1,3 @@
+Calculate nulling fraction
+
+./nullingFrac -f filename -o outname -frac XX -dev 1/xs

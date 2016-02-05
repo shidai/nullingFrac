@@ -1,0 +1,1 @@
+gcc -o nullingFrac nullingFrac.c ptimeLib.c nullingFracLib.c readPfits.c -L../cfitsio/lib -I../cfitsio/include/ -lcfitsio -I../pgplot -L../pgplot/ -lpgplot -lcpgplot -L/usr/X11/lib -lX11
